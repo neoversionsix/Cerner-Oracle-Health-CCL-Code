@@ -226,7 +226,7 @@ prompt
             AND E.ACTIVE_IND = 1
     JOIN ELH WHERE ; join with just ICU encounters
             ELH.ENCNTR_ID = E.ENCNTR_ID
-        AND ELH.ARRIVE_DT_TM < ELH.DEPART_DT_TM ; was at loc > 0
+        AND ELH.ARRIVE_DT_TM < ELH.DEPART_DT_TM ; was at loc > 0 time
         AND ELH.ACTIVE_IND = 1 ; active data only
         ; ICU nurse units only (assuming that "ICU is in the name of the unit")
         AND ELH.LOC_NURSE_UNIT_CD IN
