@@ -72,7 +72,7 @@ prompt
         RS_RESULTS->LIST[cnt].ED_ARRIVALS  = 0
     
     ; Because of SELECT DISTINCT, each detail row represents 1 unique encounter for this unit/year
-    DETAIL
+    DETAIL ; Add one to the count for the nurse unit row it's looping through
         RS_RESULTS->LIST[cnt].ED_ARRIVALS = RS_RESULTS->LIST[cnt].ED_ARRIVALS + 1
     
     ; Finalize the record structure size
