@@ -60,8 +60,9 @@ prompt
     ; Setup the record structure count
     HEAD REPORT
         cnt = 0
-    
+    ; ---------------------------------------------------------------------------------------------------------
     ; Loop through data, triggers whenever the Year, Facility, or Nurse Unit changes
+    ; ---------------------------------------------------------------------------------------------------------
     HEAD NURSE_UNIT
         cnt = cnt + 1 ; cnt will be the row number as we go though each row returned from the query
         ; Dynamically increases the size of the list in chunks of 1000 for better performance
