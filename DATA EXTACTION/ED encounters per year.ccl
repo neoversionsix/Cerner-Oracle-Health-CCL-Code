@@ -1,0 +1,100 @@
+drop program wh_jw_temp_report go
+create program wh_jw_temp_report
+; Program Notes
+    /*
+    Temporary report template used by Jason Whittle for CCL programs
+    Programmer: Jason Whittle
+    Service Request - 
+    Date: 4 Aug 2026
+    Request: 
+    Hi, Can I please have ED attendances by arrival date from CY 2017 -2025 ASAP? Just aggregate per CY will do.
+    Need to finish off a piece of work as requested by DH DD   TIA    - E.T
+    */
+
+prompt
+        "Output to File/Printer/MINE" = "MINE"
+	
+    WITH OUTDEV
+
+; ---------------------------------------------------------------------------------------------------------
+; Record Structure: Stores the aggregated distinct counts.
+; ---------------------------------------------------------------------------------------------------------
+    RECORD RS_RESULTS (
+      1 CNT = I4
+      1 LIST [*]
+        2 ARRIVAL_YEAR = I4
+        2 FACILITY = VC
+        2 NURSE_UNIT = VC
+        2 ED_ARRIVALS = I4
+    )
+
+; ---------------------------------------------------------------------------------------------------------
+; Main Query: Retrieves distinct combinations of Year, Facility, Unit, and Encounter ID.
+; Using SELECT DISTINCT ensures that multiple movements within the same unit for the same encounter 
+; are flattened into a single row. The Report Writer (HEAD/DETAIL) then aggregates these records.
+; ---------------------------------------------------------------------------------------------------------
+    SELECT DISTINCT INTO "NL:"
+          ARRIVAL_YEAR              = YEAR(ELH.ARRIVE_DT_TM)
+        , FACILITY                  = UAR_GET_CODE_DISPLAY(ELH.LOC_FACILITY_CD)
+        , NURSE_UNIT                = UAR_GET_CODE_DISPLAY(ELH.LOC_NURSE_UNIT_CD)
+        , ENCNTR_ID                 = ELH.ENCNTR_ID
+    FROM
+        ENCNTR_LOC_HIST       ELH
+    WHERE
+        ELH.ACTIVE_IND = 1 ; Active data only
+        AND ELH.ARRIVE_DT_TM < ELH.DEPART_DT_TM ; Patient was at location for >0 time
+        AND ELH.ARRIVE_DT_TM >= CNVTDATETIME("01-JAN-2018 00:00:00") ; Arrive time exists in EMR timeframe
+        AND ELH.LOC_FACILITY_CD IN (
+                  85758822.00 ; Footscray
+                , 86163400.00 ; Sunshine
+        )
+        AND ELH.ENCNTR_TYPE_CD = 309310.00 ; 'Emergency' from code set 71, Emergency encounters only
+    
+    ; Order by is critical for the HEAD/DETAIL sections to group the data correctly
+    ORDER BY
+          ARRIVAL_YEAR DESC
+        , FACILITY
+        , NURSE_UNIT
+        , ENCNTR_ID
+    
+    ; Setup the record structure count
+    HEAD REPORT
+        cnt = 0
+    
+    ; Loop through data, triggers whenever the Year, Facility, or Nurse Unit changes
+    HEAD NURSE_UNIT
+        cnt = cnt + 1 ; cnt will be the row number as we go though each row returned from the query
+        ; Dynamically increases the size of the list in chunks of 1000 for better performance
+        if (mod(cnt, 1000) = 1) ; Triggers when count = 1, 1001, 2001, etc.
+            stat = alterlist(RS_RESULTS->LIST, cnt + 999) ; allocate the next chunk of 1000 slots
+        endif
+        RS_RESULTS->LIST[cnt].ARRIVAL_YEAR = ARRIVAL_YEAR
+        RS_RESULTS->LIST[cnt].FACILITY     = FACILITY
+        RS_RESULTS->LIST[cnt].NURSE_UNIT   = NURSE_UNIT
+        RS_RESULTS->LIST[cnt].ED_ARRIVALS  = 0
+    
+    ; Because of SELECT DISTINCT, each detail row represents 1 unique encounter for this unit/year
+    DETAIL
+        RS_RESULTS->LIST[cnt].ED_ARRIVALS = RS_RESULTS->LIST[cnt].ED_ARRIVALS + 1
+    
+    ; Finalize the record structure size
+    FOOT REPORT
+        RS_RESULTS->CNT = cnt
+        ; Trim the list down to the exact number of actual records
+        stat = alterlist(RS_RESULTS->LIST, cnt)
+    WITH NOCOUNTER, SEPARATOR=" ", FORMAT, TIME = 1000
+
+; ---------------------------------------------------------------------------------------------------------
+; Output Query: Displays the aggregated results from the record structure to the user.
+; ---------------------------------------------------------------------------------------------------------
+    SELECT INTO $OUTDEV
+          ARRIVAL_YEAR = RS_RESULTS->LIST[D1.SEQ].ARRIVAL_YEAR
+        , FACILITY     = SUBSTRING(1, 100, RS_RESULTS->LIST[D1.SEQ].FACILITY)
+        , NURSE_UNIT   = SUBSTRING(1, 100, RS_RESULTS->LIST[D1.SEQ].NURSE_UNIT)
+        , ED_ARRIVALS  = RS_RESULTS->LIST[D1.SEQ].ED_ARRIVALS
+    FROM
+        (DUMMYT D1 WITH SEQ = RS_RESULTS->CNT)
+    WITH NOCOUNTER, SEPARATOR=" ", FORMAT, TIME = 1000
+
+end
+go
